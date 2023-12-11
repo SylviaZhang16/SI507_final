@@ -138,33 +138,42 @@ def display_game_details(game_node):
     print(f"Original Release Year: {release_year}")
 
 def fetch_steam_game_details(game_name):
-    query = '+'.join(game_name.split())
-    search_url = f"https://store.steampowered.com/api/storesearch/?term={query}&cc=US&l=english"
-    search_response = requests.get(search_url)
-    if search_response.status_code != 200:
-        print("Failed to search game on Steam.")
-        return None
+    try:
+        query = '+'.join(game_name.split())
+        search_url = f"https://store.steampowered.com/api/storesearch/?term={query}&cc=US&l=english"
+        search_response = requests.get(search_url)
+        if search_response.status_code != 200:
+            print("Failed to search game on Steam.")
+            return None
 
-    search_results = search_response.json().get('items', [])
+        search_results = search_response.json().get('items', [])
+        
+        steam_app_id = None
+        for item in search_results:
+            if game_name.lower() in item['name'].lower(): 
+                steam_app_id = item['id']
+                break
+
+        if not steam_app_id:
+            print("Game not found on Steam.")
+            return None
+
+        details_url = f"http://store.steampowered.com/api/appdetails?appids={steam_app_id}"
+        details_response = requests.get(details_url)
+        if details_response.status_code != 200:
+            print("Failed to fetch game details from Steam.")
+            return None
+
+        game_details = details_response.json().get(str(steam_app_id), {}).get('data', None)
+        return game_details if game_details else None
     
-    steam_app_id = None
-    for item in search_results:
-        if game_name.lower() in item['name'].lower(): 
-            steam_app_id = item['id']
-            break
-
-    if not steam_app_id:
-        print("Game not found on Steam.")
+    except requests.exceptions.ConnectionError:
+        print("Failed to connect to Steam API. Please check your connection or try again later.")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
         return None
 
-    details_url = f"http://store.steampowered.com/api/appdetails?appids={steam_app_id}"
-    details_response = requests.get(details_url)
-    if details_response.status_code != 200:
-        print("Failed to fetch game details from Steam.")
-        return None
-
-    game_details = details_response.json().get(str(steam_app_id), {}).get('data', None)
-    return game_details if game_details else None
 
 
 def display_steam_game_details(game_details):
@@ -184,9 +193,8 @@ def display_steam_game_details(game_details):
         required_age = game_details.get('required_age', 'Age rating not available')
         print(f"Required Age: {required_age}")
 
-
     else:
-        print("No additional details available from Steam.")
+         print("Failed to fetch game details from Steam. This could be due to an API issue such as max retries exceeded. Please try again later.")
 
 def get_user_choice(options, prompt):
     print(prompt)
@@ -285,7 +293,7 @@ def main():
         key=lambda x: (x.isdigit(), x),
         reverse=True
     )
-    release_year_choice = check_and_get_choice(release_year_options, "release year on this platform", games_tree, [platform_choice, genre_choice, theme_choice])
+    release_year_choice = check_and_get_choice(release_year_options, "original release year", games_tree, [platform_choice, genre_choice, theme_choice])
 
     selected_games_node = games_tree.children[platform_choice].children[genre_choice].children[theme_choice].children.get(release_year_choice)
     
@@ -333,8 +341,6 @@ def main():
                 steam_game_details = fetch_steam_game_details(selected_game_node.data['name'])
                 if steam_game_details:
                     display_steam_game_details(steam_game_details)
-                else:
-                    print(f"The game '{selected_game_node.data['name']}' is not available on Steam or could not be found.")
         else:
             print("No games found matching your criteria. Please try different selections.")
 
